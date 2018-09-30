@@ -50,11 +50,36 @@ class Session:
         self.login()
 
     def login(self):
-        url = 'https://www.23andme.com/cas/signin/'
-        data = { 'username': self.username, 'password': self.password, '__source_node__': 'start', '__form__': 'login'}
+        url = 'https://auth.23andme.com/login/'
         while True:
             try:
-                r = self.s.post(url, data = data, timeout = self.timeout)
+                r = self.s.get(url, timeout = self.timeout)
+            except requests.exceptions.ReadTimeout:
+                if self.verbose:
+                    self.logfile.write('[' + time.strftime("%Y-%m-%d %H:%M:%S") + '] ' + url + ' Read timed out\n')
+                continue
+            except requests.exceptions.ConnectionError:
+                if self.verbose:
+                    self.logfile.write('[' + time.strftime("%Y-%m-%d %H:%M:%S") + '] ' + url + ' Connection aborted\n')
+                time.sleep(self.timeout)
+                continue
+            if self.verbose:
+                self.logfile.write('[' + time.strftime("%Y-%m-%d %H:%M:%S") + '] ' + url + ' Status code ' + str(r.status_code) + '\n')
+
+            # extract csrftoken
+            cookies = requests.utils.dict_from_cookiejar(self.s.cookies)
+            csrftoken = cookies['csrftoken']
+            # extract csrfmiddlewaretoken
+            text = r.text
+            regexp = re.compile('name=\'csrfmiddlewaretoken\' value=\'.*\'')
+            res = regexp.search(text)
+            csrfmiddlewaretoken = text[res.span()[0]+34:res.span()[1]-1]
+            data = { 'csrfmiddlewaretoken': csrfmiddlewaretoken, 'username': self.username, 'password': self.password }
+            # set header to avoid receiving a 403 response
+            headers = { 'referer': url }
+
+            try:
+                r = self.s.post(url, cookies = { 'csrftoken': csrftoken }, data = data, headers = headers, timeout = self.timeout)
             except requests.exceptions.ReadTimeout:
                 if self.verbose:
                     self.logfile.write('[' + time.strftime("%Y-%m-%d %H:%M:%S") + '] ' + url + ' Read timed out\n')
@@ -67,7 +92,7 @@ class Session:
             if self.verbose:
                 self.logfile.write('[' + time.strftime("%Y-%m-%d %H:%M:%S") + '] ' + url + ' Status code ' + str(r.status_code) + '\n')
             cookies = requests.utils.dict_from_cookiejar(self.s.cookies)
-            self.cookies = { 'uuid': cookies['uuid'], 'sessionid': cookies['sessionid'] }
+            self.cookies = { 'sessionid': cookies['sessionid'] }
             self.retry = 0
             return
 
@@ -187,9 +212,12 @@ if __name__ == '__main__':
 
     username = args.u if args.u else input("Enter 23andMe username: ")
     password = args.p if args.p else getpass.getpass("Enter 23andMe password: ")
+    verbose = args.v
+    logfile = args.l
+    timeout = args.t
 
     # initialize a session with 23andMe server
-    session = Session(username, password, args.v, args.l, args.t)
+    session = Session(username, password, verbose, logfile, timeout)
 
     # download list of profiles owned by the account
     data = session.get_account()
