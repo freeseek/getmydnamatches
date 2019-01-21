@@ -71,7 +71,7 @@ class Session:
             csrftoken = cookies['csrftoken']
             # extract csrfmiddlewaretoken
             text = r.text
-            regexp = re.compile('name=\'csrfmiddlewaretoken\' value=\'.*\'')
+            regexp = re.compile('name=\"csrfmiddlewaretoken\" value=\".*\"')
             res = regexp.search(text)
             csrfmiddlewaretoken = text[res.span()[0]+34:res.span()[1]-1]
             data = { 'csrfmiddlewaretoken': csrfmiddlewaretoken, 'username': self.username, 'password': self.password }
